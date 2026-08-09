@@ -1,4 +1,4 @@
-name: Sync NewWorld with Keiyoushi
+name: Sincronización
 
 on:
   workflow_dispatch:
@@ -13,85 +13,109 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure Git
+      - name: Configurar Git
         run: |
           git config user.name "NewWorld Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Fetch repo branch
+      - name: Obtener rama repo
         run: |
           git fetch origin repo:repo
           git checkout repo
 
-      - name: Download Keiyoushi index
+      - name: Descargar catálogo de Keiyoushi
         run: |
-          curl -L \
-            https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json \
+          curl -fL \
+            "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json" \
             -o /tmp/keiyoushi-index.json
 
-      - name: Filter Spanish, Latin Spanish and English
+      - name: Crear catálogo NewWorld
         run: |
           jq '
-            [
-              .[]
-              | select(
-                  (.lang == "es")
-                  or (.lang == "es-419")
-                  or (.lang == "en")
-                  or (
-                    (.sources // [])
-                    | any(
-                        .[]
-                        | .lang == "es"
-                          or .lang == "es-419"
-                          or .lang == "en"
+            .extensionList.extensions
+            | map(
+                . as $extension
+                |
+                (
+                  $extension.sources
+                  | map(
+                      select(
+                        .language == "es"
+                        or .language == "es-419"
+                        or .language == "en"
                       )
+                    )
+                ) as $sources
+                |
+                select(($sources | length) > 0)
+                |
+                {
+                  name: $extension.name,
+                  pkg: $extension.packageName,
+                  apk: ($extension.resources.apkUrl | split("/")[-1]),
+                  lang: (
+                    $extension.packageName
+                    | split(".")[4]
+                  ),
+                  code: ($extension.versionCode | tonumber),
+                  version: $extension.versionName,
+                  nsfw: (
+                    if $extension.contentWarning == "CONTENT_WARNING_NSFW"
+                    then 1
+                    else 0
+                    end
+                  ),
+                  sources: (
+                    $sources
+                    | map({
+                        name: .name,
+                        lang: .language,
+                        id: .id,
+                        baseUrl: .homeUrl
+                      })
                   )
+                }
               )
-            ]
           ' /tmp/keiyoushi-index.json > index.min.json
 
-      - name: Download selected APKs
+      - name: Mostrar cantidad de extensiones
+        run: |
+          echo "Extensiones encontradas:"
+          jq 'length' index.min.json
+
+      - name: Descargar APK
         run: |
           mkdir -p apk
-          rm -f apk/*.apk
 
-          jq -r '.[].apk' index.min.json | while read -r apk; do
-            echo "Downloading: $apk"
+          jq -r '.[].apk' index.min.json | sort -u | while read -r apk; do
+            echo "Descargando: $apk"
 
             curl -fL \
               "https://raw.githubusercontent.com/keiyoushi/extensions/repo/apk/$apk" \
               -o "apk/$apk"
           done
 
-      - name: Remove invalid downloads
+      - name: Comprobar APK
         run: |
-          find apk -type f -size 0 -delete
-
-      - name: Show synchronized extensions
-        run: |
-          echo "Extensions synchronized:"
-          jq 'length' index.min.json
-
-          echo "APK files:"
+          echo "APK descargados:"
           find apk -type f -name "*.apk" | wc -l
 
-      - name: Commit changes
+      - name: Guardar cambios
         run: |
           git add index.min.json apk/
 
           if git diff --cached --quiet; then
-            echo "No changes detected."
+            echo "No hay cambios."
             exit 0
           fi
 
-          git commit -m "Sync extensions from Keiyoushi"
+          git commit -m "Actualizar extensiones"
 
-      - name: Push to repo branch
+      - name: Subir cambios
         run: |
           git push origin repo
