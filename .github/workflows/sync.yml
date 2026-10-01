@@ -88,18 +88,6 @@ jobs:
           echo "Extensiones encontradas:"
           jq 'length' index.min.json
 
-      - name: Descargar APK
-        run: |
-          mkdir -p apk
-
-          jq -r '.[].apk' index.min.json | sort -u | while read -r apk; do
-            echo "Descargando: $apk"
-
-            curl -fL \
-              "https://raw.githubusercontent.com/keiyoushi/extensions/repo/apk/$apk" \
-              -o "apk/$apk"
-          done
-
       - name: Comprobar APK
         run: |
           echo "APK descargados:"
