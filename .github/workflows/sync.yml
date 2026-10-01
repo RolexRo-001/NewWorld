@@ -1,109 +1,78 @@
-name: Sincronización
+name: Sincronizar Keiyoushi
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 6 * * *"
 
 permissions:
   contents: write
 
 jobs:
   sync:
+    name: Sincronización
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Obtener NewWorld
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Configurar Git
         run: |
           git config user.name "NewWorld Bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "41808202+github-actions[bot]@users.noreply.github.com"
 
-      - name: Obtener rama repo
+      - name: Descargar repositorio de Keiyoushi
         run: |
-          git fetch origin repo:repo
-          git checkout repo
+          rm -rf /tmp/keiyoushi
 
-      - name: Descargar catálogo de Keiyoushi
-        run: |
-          curl -fL \
-            "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json" \
-            -o /tmp/keiyoushi-index.json
+          git clone \
+            --depth 1 \
+            --branch repo \
+            https://github.com/keiyoushi/extensions.git \
+            /tmp/keiyoushi
 
-      - name: Crear catálogo NewWorld
+      - name: Preparar rama repo
         run: |
-          jq '
-            .extensionList.extensions
-            | map(
-                . as $extension
-                |
-                (
-                  $extension.sources
-                  | map(
-                      select(
-                        .language == "es"
-                        or .language == "es-419"
-                        or .language == "en"
-                      )
-                    )
-                ) as $sources
-                |
-                select(($sources | length) > 0)
-                |
-                {
-                  name: $extension.name,
-                  pkg: $extension.packageName,
-                  apk: ($extension.resources.apkUrl | split("/")[-1]),
-                  lang: (
-                    $extension.packageName
-                    | split(".")[4]
-                  ),
-                  code: ($extension.versionCode | tonumber),
-                  version: $extension.versionName,
-                  nsfw: (
-                    if $extension.contentWarning == "CONTENT_WARNING_NSFW"
-                    then 1
-                    else 0
-                    end
-                  ),
-                  sources: (
-                    $sources
-                    | map({
-                        name: .name,
-                        lang: .language,
-                        id: .id,
-                        baseUrl: .homeUrl
-                      })
-                  )
-                }
-              )
-          ' /tmp/keiyoushi-index.json > index.min.json
+          rm -rf /tmp/newworld-repo
+          mkdir -p /tmp/newworld-repo
 
-      - name: Mostrar cantidad de extensiones
-        run: |
-          echo "Extensiones encontradas:"
-          jq 'length' index.min.json
+          cp -a /tmp/keiyoushi/. /tmp/newworld-repo/
 
-      - name: Comprobar APK
-        run: |
-          echo "APK descargados:"
-          find apk -type f -name "*.apk" | wc -l
+          rm -rf /tmp/newworld-repo/.git
 
-      - name: Guardar cambios
+      - name: Publicar rama repo
         run: |
-          git add index.min.json apk/
+          git fetch origin
+
+          if git show-ref --verify --quiet refs/remotes/origin/repo; then
+            git checkout repo
+            git reset --hard origin/repo
+          else
+            git checkout --orphan repo
+            git rm -rf . || true
+          fi
+
+          cp -a /tmp/newworld-repo/. .
+
+          git add -A
 
           if git diff --cached --quiet; then
             echo "No hay cambios."
-            exit 0
+          else
+            git commit -m "Sincronizar extensiones de Keiyoushi"
+            git push origin repo
           fi
 
-          git commit -m "Actualizar extensiones"
-
-      - name: Subir cambios
+      - name: Mostrar resultado
         run: |
-          git push origin repo
+          echo "====================================="
+          echo "     NEW WORLD - SINCRONIZADO"
+          echo "====================================="
+          echo "Repositorio: RolexRo-001/NewWorld"
+          echo "Rama: repo"
+          echo ""
+          echo "Contenido:"
+          ls -lah
