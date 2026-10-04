@@ -14,88 +14,59 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Obtener NewWorld
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Configurar Git
+      - name: Clonar Keiyoushi
         run: |
+          git clone --depth 1 --branch repo https://github.com/keiyoushi/extensions.git keiyoushi
+
+      - name: Preparar rama repo
+        run: |
+          cd keiyoushi
+          rm -rf .git
+
+          git init
           git config user.name "NewWorld Bot"
           git config user.email "41808202+github-actions[bot]@users.noreply.github.com"
 
-      - name: Descargar repositorio de Keiyoushi
-        run: |
-          rm -rf /tmp/keiyoushi
-
-          git clone \
-            --depth 1 \
-            --branch repo \
-            https://github.com/keiyoushi/extensions.git \
-            /tmp/keiyoushi
-
-      - name: Preparar contenido
-        run: |
-          rm -rf /tmp/newworld-repo
-          mkdir -p /tmp/newworld-repo
-
-          cp -a /tmp/keiyoushi/. /tmp/newworld-repo/
-
-          rm -rf /tmp/newworld-repo/.git
-
-          echo "Contenido descargado:"
-          find /tmp/newworld-repo -maxdepth 2 -type f | head -100
-
-      - name: Publicar rama repo
-        run: |
-          git fetch origin
-
-          if git ls-remote --exit-code --heads origin repo >/dev/null 2>&1; then
-            git checkout repo
-            git reset --hard origin/repo
-          else
-            git checkout --orphan repo
-            git rm -rf . || true
-          fi
-
-          cp -a /tmp/newworld-repo/. .
-
           git add -A
+          git commit -m "Sincronizar extensiones de Keiyoushi"
 
-          if git diff --cached --quiet; then
-            echo "No hay cambios."
-          else
-            git commit -m "Sincronizar extensiones de Keiyoushi"
-            git push origin repo
-          fi
-
-      - name: Verificar repositorio
+      - name: Publicar NewWorld
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "====================================="
+          cd keiyoushi
+
+          git branch -M repo
+
+          git remote add origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
+
+          git push --force origin repo
+
+      - name: Verificar
+        run: |
+          cd keiyoushi
+
+          echo "======================================"
           echo "       NEW WORLD - VERIFICACIÓN"
-          echo "====================================="
+          echo "======================================"
 
           echo ""
-          echo "Rama actual:"
-          git branch --show-current
+          echo "Archivos:"
+          ls -lah
 
           echo ""
-          echo "Archivos principales:"
-          ls -lah index.min.json repo.json 2>/dev/null || true
+          echo "APK encontrados:"
+          find apk -type f -name "*.apk" | wc -l
 
           echo ""
-          echo "Cantidad de APK:"
-          find . -type f -name "*.apk" | wc -l
+          echo "Ejemplos:"
+          find apk -type f -name "*.apk" | head -20
 
           echo ""
-          echo "Cantidad de iconos:"
-          find . -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.webp" \) | wc -l
+          echo "Índice:"
+          ls -lh index.json index.min.json index.pb repo.json
 
           echo ""
-          echo "Primeras extensiones:"
-          find . -type f -name "*.apk" | head -20
-
-          echo ""
-          echo "====================================="
+          echo "======================================"
           echo "       SINCRONIZACIÓN COMPLETA"
-          echo "====================================="
+          echo "======================================"
