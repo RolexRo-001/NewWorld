@@ -26,24 +26,106 @@ jobs:
         run: |
           cd /tmp/newworld
 
-          rm -rf .git
-
           python3 - <<'PY'
           import json
+          import os
+          from urllib.parse import urlparse
 
-          # Mantener el formato de índice compatible con
-          # versiones antiguas de Aniyomi/Mihon.
-          with open("repo.json", "r", encoding="utf-8") as f:
-              repo = json.load(f)
+          print("Generando index.min.json...")
 
-          if "meta" in repo:
-              repo["meta"]["name"] = "NewWorld"
-              repo["meta"]["website"] = "https://github.com/RolexRo-001/NewWorld"
+          with open("index.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
 
-          with open("repo.json", "w", encoding="utf-8") as f:
-              json.dump(repo, f, indent=2, ensure_ascii=False)
-              f.write("\n")
+          extensions = data.get("extensionList", {}).get("extensions", [])
+
+          result = []
+          encontrados = 0
+          faltantes = 0
+
+          for ext in extensions:
+
+              resources = ext.get("resources", {})
+              apk_url = resources.get("apkUrl", "")
+
+              if not apk_url:
+                  continue
+
+              apk_name = os.path.basename(urlparse(apk_url).path)
+
+              apk_path = os.path.join("apk", apk_name)
+
+              # Solo publicar extensiones cuyo APK exista realmente
+              if not os.path.isfile(apk_path):
+                  faltantes += 1
+                  continue
+
+              package_name = ext.get("packageName", "")
+
+              # Obtener idioma desde el package name
+              language = "all"
+
+              parts = package_name.split(".")
+
+              if len(parts) >= 5:
+                  language = parts[4]
+
+              sources = []
+
+              for source in ext.get("sources", []):
+
+                  item = {
+                      "name": source.get("name", ext.get("name", "")),
+                      "lang": source.get("language", language),
+                      "id": str(source.get("id", "")),
+                      "baseUrl": source.get("homeUrl", "")
+                  }
+
+                  if source.get("mirrorUrls"):
+                      item["mirrorUrls"] = source["mirrorUrls"]
+
+                  sources.append(item)
+
+              try:
+                  version_code = int(ext.get("versionCode", 0))
+              except:
+                  version_code = 0
+
+              content_warning = ext.get("contentWarning", "")
+
+              nsfw = 1 if "NSFW" in content_warning else 0
+
+              entry = {
+                  "name": ext.get("name", ""),
+                  "pkg": package_name,
+                  "apk": apk_name,
+                  "lang": language,
+                  "code": version_code,
+                  "version": ext.get("versionName", ""),
+                  "nsfw": nsfw,
+                  "sources": sources
+              }
+
+              result.append(entry)
+              encontrados += 1
+
+          with open("index.min.json", "w", encoding="utf-8") as f:
+              json.dump(
+                  result,
+                  f,
+                  ensure_ascii=False,
+                  separators=(",", ":")
+              )
+
+          print("--------------------------------------")
+          print("INDEX.MIN.JSON GENERADO")
+          print("--------------------------------------")
+          print("Extensiones publicadas:", encontrados)
+          print("APK faltantes:", faltantes)
+          print("Archivo:", os.path.getsize("index.min.json"), "bytes")
+          print("--------------------------------------")
           PY
+
+          rm -rf .git
 
           git init
           git config user.name "NewWorld Bot"
