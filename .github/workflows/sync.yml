@@ -29,100 +29,126 @@ jobs:
           python3 - <<'PY'
           import json
           import os
-          from urllib.parse import urlparse
+          import re
 
-          print("Generando index.min.json...")
+          print("Preparando index.min.json...")
 
           with open("index.json", "r", encoding="utf-8") as f:
               data = json.load(f)
 
-          extensions = data.get("extensionList", {}).get("extensions", [])
+          extension_list = data.get("extensionList", {})
+          extensions = extension_list.get("extensions", [])
 
-          result = []
-          encontrados = 0
-          faltantes = 0
+          if not isinstance(extensions, list):
+              raise SystemExit("ERROR: extensionList.extensions no es una lista")
+
+          resultado = []
+          total = 0
+          publicados = 0
 
           for ext in extensions:
 
+              if not isinstance(ext, dict):
+                  continue
+
+              total += 1
+
+              name = ext.get("name", "")
+              package_name = ext.get("packageName", "")
               resources = ext.get("resources", {})
+
+              if not isinstance(resources, dict):
+                  continue
+
               apk_url = resources.get("apkUrl", "")
 
               if not apk_url:
                   continue
 
-              apk_name = os.path.basename(urlparse(apk_url).path)
+              apk_name = apk_url.split("/")[-1]
 
               apk_path = os.path.join("apk", apk_name)
 
-              # Solo publicar extensiones cuyo APK exista realmente
               if not os.path.isfile(apk_path):
-                  faltantes += 1
                   continue
 
-              package_name = ext.get("packageName", "")
-
-              # Obtener idioma desde el package name
+              # Idioma principal
               language = "all"
 
               parts = package_name.split(".")
 
-              if len(parts) >= 5:
+              if len(parts) >= 6:
                   language = parts[4]
+
+              # NSFW
+              warning = str(ext.get("contentWarning", ""))
+
+              nsfw = 1 if "NSFW" in warning.upper() else 0
+
+              # Código de versión
+              try:
+                  code = int(ext.get("versionCode", 0))
+              except:
+                  code = 0
+
+              version = str(ext.get("versionName", ""))
 
               sources = []
 
-              for source in ext.get("sources", []):
+              raw_sources = ext.get("sources", [])
 
-                  item = {
-                      "name": source.get("name", ext.get("name", "")),
-                      "lang": source.get("language", language),
-                      "id": str(source.get("id", "")),
-                      "baseUrl": source.get("homeUrl", "")
-                  }
+              if isinstance(raw_sources, list):
 
-                  if source.get("mirrorUrls"):
-                      item["mirrorUrls"] = source["mirrorUrls"]
+                  for source in raw_sources:
 
-                  sources.append(item)
+                      if not isinstance(source, dict):
+                          continue
 
-              try:
-                  version_code = int(ext.get("versionCode", 0))
-              except:
-                  version_code = 0
+                      source_item = {
+                          "name": str(source.get("name", name)),
+                          "lang": str(source.get("language", language)),
+                          "id": str(source.get("id", "")),
+                          "baseUrl": str(source.get("homeUrl", ""))
+                      }
 
-              content_warning = ext.get("contentWarning", "")
+                      if source.get("mirrorUrls"):
+                          source_item["mirrorUrls"] = source["mirrorUrls"]
 
-              nsfw = 1 if "NSFW" in content_warning else 0
+                      sources.append(source_item)
 
-              entry = {
-                  "name": ext.get("name", ""),
+              item = {
+                  "name": name,
                   "pkg": package_name,
                   "apk": apk_name,
                   "lang": language,
-                  "code": version_code,
-                  "version": ext.get("versionName", ""),
+                  "code": code,
+                  "version": version,
                   "nsfw": nsfw,
                   "sources": sources
               }
 
-              result.append(entry)
-              encontrados += 1
+              resultado.append(item)
+              publicados += 1
 
           with open("index.min.json", "w", encoding="utf-8") as f:
               json.dump(
-                  result,
+                  resultado,
                   f,
                   ensure_ascii=False,
                   separators=(",", ":")
               )
 
-          print("--------------------------------------")
-          print("INDEX.MIN.JSON GENERADO")
-          print("--------------------------------------")
-          print("Extensiones publicadas:", encontrados)
-          print("APK faltantes:", faltantes)
-          print("Archivo:", os.path.getsize("index.min.json"), "bytes")
-          print("--------------------------------------")
+          print("")
+          print("======================================")
+          print("      INDEX.MIN.JSON GENERADO")
+          print("======================================")
+          print("Extensiones encontradas:", total)
+          print("Extensiones publicadas:", publicados)
+          print("Tamaño:", os.path.getsize("index.min.json"), "bytes")
+          print("======================================")
+
+          if publicados == 0:
+              raise SystemExit("ERROR: No se encontró ninguna extensión con APK")
           PY
 
           rm -rf .git
@@ -133,6 +159,7 @@ jobs:
 
           git add -A
           git commit -m "Actualizar repositorio NewWorld"
+
 
       - name: Publicar NewWorld
         env:
