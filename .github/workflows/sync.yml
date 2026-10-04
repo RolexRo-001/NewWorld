@@ -34,7 +34,7 @@ jobs:
             https://github.com/keiyoushi/extensions.git \
             /tmp/keiyoushi
 
-      - name: Preparar rama repo
+      - name: Preparar contenido
         run: |
           rm -rf /tmp/newworld-repo
           mkdir -p /tmp/newworld-repo
@@ -43,11 +43,14 @@ jobs:
 
           rm -rf /tmp/newworld-repo/.git
 
+          echo "Contenido descargado:"
+          find /tmp/newworld-repo -maxdepth 2 -type f | head -100
+
       - name: Publicar rama repo
         run: |
           git fetch origin
 
-          if git show-ref --verify --quiet refs/remotes/origin/repo; then
+          if git ls-remote --exit-code --heads origin repo >/dev/null 2>&1; then
             git checkout repo
             git reset --hard origin/repo
           else
@@ -66,13 +69,33 @@ jobs:
             git push origin repo
           fi
 
-      - name: Mostrar resultado
+      - name: Verificar repositorio
         run: |
           echo "====================================="
-          echo "     NEW WORLD - SINCRONIZADO"
+          echo "       NEW WORLD - VERIFICACIÓN"
           echo "====================================="
-          echo "Repositorio: RolexRo-001/NewWorld"
-          echo "Rama: repo"
+
           echo ""
-          echo "Contenido:"
-          ls -lah
+          echo "Rama actual:"
+          git branch --show-current
+
+          echo ""
+          echo "Archivos principales:"
+          ls -lah index.min.json repo.json 2>/dev/null || true
+
+          echo ""
+          echo "Cantidad de APK:"
+          find . -type f -name "*.apk" | wc -l
+
+          echo ""
+          echo "Cantidad de iconos:"
+          find . -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.webp" \) | wc -l
+
+          echo ""
+          echo "Primeras extensiones:"
+          find . -type f -name "*.apk" | head -20
+
+          echo ""
+          echo "====================================="
+          echo "       SINCRONIZACIÓN COMPLETA"
+          echo "====================================="
