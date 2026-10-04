@@ -1,4 +1,4 @@
-name: Sincronizar Keiyoushi
+name: Sincronizar NewWorld
 
 on:
   workflow_dispatch:
@@ -10,95 +10,80 @@ permissions:
 
 jobs:
   sync:
-    name: Sincronización
+    name: Sincronizar repositorio
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clonar Keiyoushi
+      - name: Descargar repositorio compatible
         run: |
-          git clone --depth 1 --branch repo https://github.com/keiyoushi/extensions.git keiyoushi
+          git clone \
+            --depth 1 \
+            --branch repo \
+            https://github.com/GeorgyDesign/mihon-extensions.git \
+            /tmp/newworld
 
       - name: Preparar repositorio
         run: |
-          cd keiyoushi
+          cd /tmp/newworld
 
           rm -rf .git
+
+          python3 - <<'PY'
+          import json
+
+          # Mantener el formato de índice compatible con
+          # versiones antiguas de Aniyomi/Mihon.
+          with open("repo.json", "r", encoding="utf-8") as f:
+              repo = json.load(f)
+
+          if "meta" in repo:
+              repo["meta"]["name"] = "NewWorld"
+              repo["meta"]["website"] = "https://github.com/RolexRo-001/NewWorld"
+
+          with open("repo.json", "w", encoding="utf-8") as f:
+              json.dump(repo, f, indent=2, ensure_ascii=False)
+              f.write("\n")
+          PY
 
           git init
           git config user.name "NewWorld Bot"
           git config user.email "41808202+github-actions[bot]@users.noreply.github.com"
 
           git add -A
-          git commit -m "Sincronizar extensiones de Keiyoushi"
-          
-      - name: Corregir repo.json
-        run: |
-          cd keiyoushi
+          git commit -m "Actualizar repositorio NewWorld"
 
-          python3 - <<'PY'
-          import json
-
-          with open("repo.json", "r", encoding="utf-8") as f:
-              data = json.load(f)
-
-          data["index_v2"] = "https://github.com/RolexRo-001/NewWorld/raw/repo/index.pb"
-
-          if "meta" not in data:
-              data["meta"] = {}
-
-          data["meta"]["name"] = "NewWorld"
-          data["meta"]["website"] = "https://github.com/RolexRo-001/NewWorld"
-
-          with open("repo.json", "w", encoding="utf-8") as f:
-              json.dump(data, f, indent=2, ensure_ascii=False)
-              f.write("\n")
-
-          print("repo.json corregido:")
-          print(json.dumps(data, indent=2, ensure_ascii=False))
-          PY
-
-          git add repo.json
-          git commit -m "Configurar NewWorld"
-
-      - name: Publicar rama repo
+      - name: Publicar NewWorld
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd keiyoushi
+          cd /tmp/newworld
 
           git branch -M repo
 
-          git remote add origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
+          git remote add origin \
+            https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
 
           git push --force origin repo
 
       - name: Verificar
         run: |
-          cd keiyoushi
+          cd /tmp/newworld
 
           echo "======================================"
-          echo "       NEW WORLD - VERIFICACIÓN"
+          echo "       NEWWORLD - VERIFICACIÓN"
           echo "======================================"
 
           echo ""
-          echo "index.json:"
-          ls -lh index.json
+          echo "Archivos:"
+          ls -lah
 
           echo ""
-          echo "index.pb:"
-          ls -lh index.pb
+          echo "APK:"
+          find apk -type f -name "*.apk" | wc -l
 
           echo ""
-          echo "index.min.json:"
-          ls -lh index.min.json
-
-          echo ""
-          echo "repo.json:"
-          cat repo.json
-
-          echo ""
-          echo "Extensiones en index.json:"
-          grep -c '"name":' index.json || true
+          echo "Index:"
+          ls -lh index.min.json index.json repo.json
 
           echo ""
           echo "======================================"
