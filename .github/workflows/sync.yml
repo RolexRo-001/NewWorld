@@ -30,7 +30,7 @@ jobs:
 
           git add -A
           git commit -m "Sincronizar extensiones de Keiyoushi"
-
+          
       - name: Corregir repo.json
         run: |
           cd keiyoushi
@@ -41,7 +41,10 @@ jobs:
           with open("repo.json", "r", encoding="utf-8") as f:
               data = json.load(f)
 
-          data["index_v2"] = "https://raw.githubusercontent.com/RolexRo-001/NewWorld/repo/index.pb"
+          data["index_v2"] = "https://github.com/RolexRo-001/NewWorld/raw/repo/index.pb"
+
+          if "meta" not in data:
+              data["meta"] = {}
 
           data["meta"]["name"] = "NewWorld"
           data["meta"]["website"] = "https://github.com/RolexRo-001/NewWorld"
@@ -49,10 +52,13 @@ jobs:
           with open("repo.json", "w", encoding="utf-8") as f:
               json.dump(data, f, indent=2, ensure_ascii=False)
               f.write("\n")
+
+          print("repo.json corregido:")
+          print(json.dumps(data, indent=2, ensure_ascii=False))
           PY
 
           git add repo.json
-          git commit -m "Configurar repositorio NewWorld"
+          git commit -m "Configurar NewWorld"
 
       - name: Publicar rama repo
         env:
