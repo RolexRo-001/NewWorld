@@ -18,9 +18,10 @@ jobs:
         run: |
           git clone --depth 1 --branch repo https://github.com/keiyoushi/extensions.git keiyoushi
 
-      - name: Preparar rama repo
+      - name: Preparar repositorio
         run: |
           cd keiyoushi
+
           rm -rf .git
 
           git init
@@ -30,7 +31,30 @@ jobs:
           git add -A
           git commit -m "Sincronizar extensiones de Keiyoushi"
 
-      - name: Publicar NewWorld
+      - name: Corregir repo.json
+        run: |
+          cd keiyoushi
+
+          python3 - <<'PY'
+          import json
+
+          with open("repo.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          data["index_v2"] = "https://raw.githubusercontent.com/RolexRo-001/NewWorld/repo/index.pb"
+
+          data["meta"]["name"] = "NewWorld"
+          data["meta"]["website"] = "https://github.com/RolexRo-001/NewWorld"
+
+          with open("repo.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, indent=2, ensure_ascii=False)
+              f.write("\n")
+          PY
+
+          git add repo.json
+          git commit -m "Configurar repositorio NewWorld"
+
+      - name: Publicar rama repo
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -51,20 +75,24 @@ jobs:
           echo "======================================"
 
           echo ""
-          echo "Archivos:"
-          ls -lah
+          echo "index.json:"
+          ls -lh index.json
 
           echo ""
-          echo "APK encontrados:"
-          find apk -type f -name "*.apk" | wc -l
+          echo "index.pb:"
+          ls -lh index.pb
 
           echo ""
-          echo "Ejemplos:"
-          find apk -type f -name "*.apk" | head -20
+          echo "index.min.json:"
+          ls -lh index.min.json
 
           echo ""
-          echo "Índice:"
-          ls -lh index.json index.min.json index.pb repo.json
+          echo "repo.json:"
+          cat repo.json
+
+          echo ""
+          echo "Extensiones en index.json:"
+          grep -c '"name":' index.json || true
 
           echo ""
           echo "======================================"
