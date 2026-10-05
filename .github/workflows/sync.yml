@@ -2,135 +2,149 @@ name: Sincronizar NewWorld
 
 on:
   workflow_dispatch:
+
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "0 */6 * * *"
 
 permissions:
   contents: write
 
 jobs:
-  sync:
+
+  sincronizar:
+
     name: Sincronizar repositorio
     runs-on: ubuntu-latest
 
     steps:
+
+      # ==========================================
+      # 1. DESCARGAR REPOSITORIO COMPATIBLE
+      # ==========================================
+
       - name: Descargar repositorio compatible
         run: |
-          git clone \
-            --depth 1 \
-            --branch repo \
+
+          rm -rf /tmp/source
+          rm -rf /tmp/newworld
+
+          echo "Descargando repositorio..."
+
+          git clone --depth 1 --branch repo \
             https://github.com/GeorgyDesign/mihon-extensions.git \
-            /tmp/newworld
+            /tmp/source
+
+          echo "Repositorio descargado."
+
+          echo "Contenido:"
+          ls -la /tmp/source
+
+
+      # ==========================================
+      # 2. PREPARAR REPOSITORIO
+      # ==========================================
 
       - name: Preparar repositorio
         run: |
+
+          mkdir -p /tmp/newworld
+
+          echo "Copiando archivos..."
+
+          cp -a /tmp/source/. /tmp/newworld/
+
           cd /tmp/newworld
 
+          # Eliminar información Git del repositorio original
+          rm -rf .git
+
+          echo ""
+          echo "======================================"
+          echo "   GENERANDO INDEX.MIN.JSON"
+          echo "======================================"
+
           python3 - <<'PY'
+
           import json
           import os
-          import re
+          import sys
 
-          print("Preparando index.min.json...")
+          print("Leyendo index.json...")
+
+          # ------------------------------------------
+          # LEER INDEX.JSON
+          # ------------------------------------------
 
           with open("index.json", "r", encoding="utf-8") as f:
               data = json.load(f)
 
-          extension_list = data.get("extensionList", {})
-          extensions = extension_list.get("extensions", [])
+          # ------------------------------------------
+          # DETECTAR FORMATO
+          # ------------------------------------------
+
+          if isinstance(data, list):
+
+              print("Formato detectado: lista")
+
+              extensions = data
+
+          elif isinstance(data, dict):
+
+              print("Formato detectado: objeto")
+
+              extension_list = data.get("extensionList")
+
+              if isinstance(extension_list, dict):
+
+                  extensions = extension_list.get("extensions", [])
+
+              else:
+
+                  extensions = []
+
+          else:
+
+              raise SystemExit(
+                  "ERROR: index.json tiene un formato desconocido"
+              )
+
+          # ------------------------------------------
+          # VALIDAR
+          # ------------------------------------------
 
           if not isinstance(extensions, list):
-              raise SystemExit("ERROR: extensionList.extensions no es una lista")
+
+              raise SystemExit(
+                  "ERROR: la lista de extensiones no es válida"
+              )
+
+          print(
+              "Extensiones encontradas:",
+              len(extensions)
+          )
+
+          # ------------------------------------------
+          # LIMPIAR ELEMENTOS INVÁLIDOS
+          # ------------------------------------------
 
           resultado = []
-          total = 0
-          publicados = 0
 
           for ext in extensions:
 
-              if not isinstance(ext, dict):
-                  continue
+              if isinstance(ext, dict):
 
-              total += 1
+                  resultado.append(ext)
 
-              name = ext.get("name", "")
-              package_name = ext.get("packageName", "")
-              resources = ext.get("resources", {})
+          # ------------------------------------------
+          # GENERAR INDEX.MIN.JSON
+          # ------------------------------------------
 
-              if not isinstance(resources, dict):
-                  continue
+          with open(
+              "index.min.json",
+              "w",
+              encoding="utf-8"
+          ) as f:
 
-              apk_url = resources.get("apkUrl", "")
-
-              if not apk_url:
-                  continue
-
-              apk_name = apk_url.split("/")[-1]
-
-              apk_path = os.path.join("apk", apk_name)
-
-              if not os.path.isfile(apk_path):
-                  continue
-
-              # Idioma principal
-              language = "all"
-
-              parts = package_name.split(".")
-
-              if len(parts) >= 6:
-                  language = parts[4]
-
-              # NSFW
-              warning = str(ext.get("contentWarning", ""))
-
-              nsfw = 1 if "NSFW" in warning.upper() else 0
-
-              # Código de versión
-              try:
-                  code = int(ext.get("versionCode", 0))
-              except:
-                  code = 0
-
-              version = str(ext.get("versionName", ""))
-
-              sources = []
-
-              raw_sources = ext.get("sources", [])
-
-              if isinstance(raw_sources, list):
-
-                  for source in raw_sources:
-
-                      if not isinstance(source, dict):
-                          continue
-
-                      source_item = {
-                          "name": str(source.get("name", name)),
-                          "lang": str(source.get("language", language)),
-                          "id": str(source.get("id", "")),
-                          "baseUrl": str(source.get("homeUrl", ""))
-                      }
-
-                      if source.get("mirrorUrls"):
-                          source_item["mirrorUrls"] = source["mirrorUrls"]
-
-                      sources.append(source_item)
-
-              item = {
-                  "name": name,
-                  "pkg": package_name,
-                  "apk": apk_name,
-                  "lang": language,
-                  "code": code,
-                  "version": version,
-                  "nsfw": nsfw,
-                  "sources": sources
-              }
-
-              resultado.append(item)
-              publicados += 1
-
-          with open("index.min.json", "w", encoding="utf-8") as f:
               json.dump(
                   resultado,
                   f,
@@ -138,63 +152,135 @@ jobs:
                   separators=(",", ":")
               )
 
+          # ------------------------------------------
+          # COMPROBAR ARCHIVO
+          # ------------------------------------------
+
+          tamaño = os.path.getsize(
+              "index.min.json"
+          )
+
           print("")
           print("======================================")
           print("      INDEX.MIN.JSON GENERADO")
           print("======================================")
-          print("Extensiones encontradas:", total)
-          print("Extensiones publicadas:", publicados)
-          print("Tamaño:", os.path.getsize("index.min.json"), "bytes")
+          print(
+              "Extensiones publicadas:",
+              len(resultado)
+          )
+          print(
+              "Tamaño:",
+              tamaño,
+              "bytes"
+          )
           print("======================================")
 
-          if publicados == 0:
-              raise SystemExit("ERROR: No se encontró ninguna extensión con APK")
+          # ------------------------------------------
+          # COMPROBAR QUE NO ESTÉ VACÍO
+          # ------------------------------------------
+
+          if len(resultado) == 0:
+
+              raise SystemExit(
+                  "ERROR: index.min.json quedó vacío"
+              )
+
+          print("")
+          print("OK: index.min.json válido.")
+
           PY
 
-          rm -rf .git
 
-          git init
-          git config user.name "NewWorld Bot"
-          git config user.email "41808202+github-actions[bot]@users.noreply.github.com"
+      # ==========================================
+      # 3. COMPROBAR ESTRUCTURA
+      # ==========================================
 
-          git add -A
-          git commit -m "Actualizar repositorio NewWorld"
+      - name: Verificar repositorio
+        run: |
 
+          cd /tmp/newworld
+
+          echo ""
+          echo "======================================"
+          echo "       VERIFICANDO REPOSITORIO"
+          echo "======================================"
+
+          echo ""
+          echo "Archivos principales:"
+
+          ls -lh \
+            index.json \
+            index.min.json \
+            repo.json
+
+          echo ""
+          echo "Carpetas:"
+
+          ls -ld \
+            apk \
+            icon
+
+          echo ""
+          echo "Cantidad de APK:"
+
+          find apk \
+            -type f \
+            -name "*.apk" \
+            | wc -l
+
+          echo ""
+          echo "Tamaño de index.min.json:"
+
+          wc -c index.min.json
+
+          echo ""
+          echo "Primeros caracteres de index.min.json:"
+
+          head -c 300 index.min.json
+
+          echo ""
+          echo ""
+          echo "======================================"
+          echo "       VERIFICACIÓN COMPLETADA"
+          echo "======================================"
+
+
+      # ==========================================
+      # 4. PUBLICAR EN NEW WORLD
+      # ==========================================
 
       - name: Publicar NewWorld
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+
           cd /tmp/newworld
 
-          git branch -M repo
+          echo ""
+          echo "======================================"
+          echo "       PUBLICANDO NEWWORLD"
+          echo "======================================"
+
+          git init
+
+          git checkout -b repo
+
+          git config user.name "NewWorld Bot"
+
+          git config user.email \
+            "41808202+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          git commit \
+            -m "Actualizar repositorio NewWorld"
 
           git remote add origin \
-            https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
 
-          git push --force origin repo
-
-      - name: Verificar
-        run: |
-          cd /tmp/newworld
-
-          echo "======================================"
-          echo "       NEWWORLD - VERIFICACIÓN"
-          echo "======================================"
-
-          echo ""
-          echo "Archivos:"
-          ls -lah
-
-          echo ""
-          echo "APK:"
-          find apk -type f -name "*.apk" | wc -l
-
-          echo ""
-          echo "Index:"
-          ls -lh index.min.json index.json repo.json
+          git push \
+            origin repo \
+            --force
 
           echo ""
           echo "======================================"
-          echo "       SINCRONIZACIÓN COMPLETA"
+          echo "       NEWWORLD PUBLICADO"
           echo "======================================"
